@@ -10,11 +10,13 @@ spine(start) ->
     spine(D);
 
 spine(D) ->
-    receive 
-	{From, Key, Value} ->
+    receive
+	{get, Pid} ->
+	    Pid ! D,
+	    D1 = D;
+	{Key, Value} ->
 	    D1 = dict:store(Key, Value, D)
     end,
-    From ! D1,
     spine(D1).
 
 to_from({Key, Value, Spine}, dict)->
@@ -24,8 +26,20 @@ to_from({Key, Value, Spine}, dict)->
 	    io:format("In to_from~n D -> ~p~n", [dict:to_list(D)])
     end,
     D;
+
 to_from({Key, Value, Spine}, list) ->
     dict:to_list(to_from({Key, Value, Spine}, dict)).
+
+pk_set({Key, Value}, Spine) ->
+    Spine ! {Key, Value}.
+
+pk_get(Spine) ->
+    Spine ! {get, self()},
+    receive
+	D ->
+	    io:format("In pk_get~n D -> ~p~n", [dict:to_list(D)])
+    end,
+    dict:to_list(D).
 
 % Call echo:listen(Port) to start the service.
 listen(Port) ->
@@ -46,19 +60,29 @@ parse(Str)->
     {value, L, _} = erl_eval:exprs(Parsed,[]),
     io:format("~p~n", [L]),
     L.
-    %io_lib:format("~p~n", [L]).
+
+cmd(Input) ->
+    case string:sub_word(Input, 1) of
+	"set" ->
+	    {set, Input -- "set "};
+	"get"  ->
+	    {get, Input -- "get "}
+    end.
             
 loop(Socket, Pid) ->
     case gen_tcp:recv(Socket, 0) of
-        {ok, Data} ->	    
-	    {Key, Value} = parse(bitstring_to_list(Data)),
-	    gen_tcp:send(Socket, 
-			 io_lib:format("~p~n", [to_from({Key, Value, Pid}, list)])),
-            loop(Socket, Pid);
+        {ok, Data} ->
+	    case cmd(bitstring_to_list(Data)) of
+		{set, Coord} ->
+		    KV = parse(Coord),
+		    pk_set(KV, Pid);
+		{get, _} ->
+		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Pid)]))
+	    end,
+	    loop(Socket, Pid);
         {error, closed} ->
             ok
     end.
 
 start(Socket) ->
-    %SpineId = spawn(?MODULE, spine, []),
     spawn(?MODULE, listen, [Socket]).
