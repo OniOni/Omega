@@ -41,13 +41,11 @@ pk_get(Spine) ->
     end,
     dict:to_list(D).
 
-% Call echo:listen(Port) to start the service.
 listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
     Pid = spawn(?MODULE, spine, [start]),
     accept(LSocket, Pid).
 
-% Wait for incoming connections and spawn the echo loop when we get one.
 accept(LSocket, Pid) ->
     {ok, Socket} = gen_tcp:accept(LSocket),
     spawn(fun() -> loop(Socket, Pid) end),
@@ -72,11 +70,11 @@ cmd(Input) ->
 loop(Socket, Pid) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} ->
-	    case cmd(bitstring_to_list(Data)) of
-		{set, Coord} ->
-		    KV = parse(Coord),
+	    case bitstring_to_list(Data) of
+		[$s, $e, $t | Coord] ->
+		    KV = parse(Coord -- " "),
 		    pk_set(KV, Pid);
-		{get, _} ->
+		[$g, $e, $t | _] ->
 		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Pid)]))
 	    end,
 	    loop(Socket, Pid);
@@ -84,5 +82,7 @@ loop(Socket, Pid) ->
             ok
     end.
 
+start(test) ->
+    start(8888);
 start(Socket) ->
     spawn(?MODULE, listen, [Socket]).
