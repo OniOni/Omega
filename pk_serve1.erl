@@ -3,7 +3,7 @@
 
 -export([listen/1, start/1, spine/1]).
 
--define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
+-define(TCP_OPTIONS, [binary, {packet, 0}, {active, once}, {reuseaddr, true}]).
 
 spine(start) ->
     D = dict:new(),
@@ -48,8 +48,10 @@ listen(Port) ->
 
 accept(LSocket, Pid) ->
     {ok, Socket} = gen_tcp:accept(LSocket),
-    spawn(fun() -> loop(Socket, Pid) end),
-    accept(LSocket, Pid).
+    inet:setopts(Socket, ?TCP_OPTIONS),
+    spawn(fun() -> accept(LSocket, Pid) end),
+    loop(Socket, Pid),
+    gen_tcp:close(Socket).
 
 parse(Str)->
     S = Str ++ ".",
@@ -68,8 +70,10 @@ cmd(Input) ->
     end.
             
 loop(Socket, Pid) ->
-    case gen_tcp:recv(Socket, 0) of
-        {ok, Data} ->
+    inet:setopts(Socket, [{active, once}]),
+    %case gen_tcp:recv(Socket, 0) of
+    receive
+        {tcp, Socket, Data} ->
 	    case bitstring_to_list(Data) of
 		[$s, $e, $t | Coord] ->
 		    KV = parse(Coord -- " "),
@@ -78,7 +82,7 @@ loop(Socket, Pid) ->
 		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Pid)]))
 	    end,
 	    loop(Socket, Pid);
-        {error, closed} ->
+        {tcp_closed, Socket} ->
             ok
     end.
 
