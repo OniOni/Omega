@@ -55,11 +55,10 @@ accept(LSocket, Pid) ->
 
 parse(Str)->
     S = Str ++ ".",
-    {ok,Scanned,_} = erl_scan:string(S),
-    {ok,Parsed} = erl_parse:parse_exprs(Scanned),
-    {value, L, _} = erl_eval:exprs(Parsed,[]),
-    io:format("~p~n", [L]),
-    L.
+    {ok, Tks,_} = erl_scan:string(S),
+    {ok, T} = erl_parse:parse_term(Tks),
+    io:format("~p~n", [T]),
+    T. 
 
 cmd(Input) ->
     case string:sub_word(Input, 1) of
