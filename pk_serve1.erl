@@ -5,10 +5,30 @@
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, once}, {reuseaddr, true}]).
 
+start(test) ->
+    start(8888);
+start(Socket) ->
+    spawn(?MODULE, listen, [Socket]).
+
+listen(Port) ->
+    {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
+    Pid = spawn(?MODULE, spine, [start]),
+    accept(LSocket, Pid).
+
+accept(LSocket, Pid) ->
+    case gen_tcp:accept(LSocket) of
+	{ok, Socket} ->
+	    inet:setopts(Socket, ?TCP_OPTIONS),
+	    spawn(fun() -> accept(LSocket, Pid) end),
+	    loop(Socket, Pid);
+	Other ->
+	    io:format("Got [~w]~n", [Other]),
+	    ok
+    end.
+
 spine(start) ->
     D = dict:new(),
     spine(D);
-
 spine(D) ->
     receive
 	{get, Pid} ->
@@ -41,19 +61,7 @@ pk_get(Spine) ->
     end,
     dict:to_list(D).
 
-listen(Port) ->
-    {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
-    Pid = spawn(?MODULE, spine, [start]),
-    accept(LSocket, Pid).
-
-accept(LSocket, Pid) ->
-    {ok, Socket} = gen_tcp:accept(LSocket),
-    inet:setopts(Socket, ?TCP_OPTIONS),
-    spawn(fun() -> accept(LSocket, Pid) end),
-    loop(Socket, Pid),
-    gen_tcp:close(Socket).
-
-parse(Str)->
+parse(Str) ->
     S = Str ++ ".",
     {ok, Tks,_} = erl_scan:string(S),
     {ok, T} = erl_parse:parse_term(Tks),
@@ -82,10 +90,6 @@ loop(Socket, Pid) ->
 	    end,
 	    loop(Socket, Pid);
         {tcp_closed, Socket} ->
+	    gen_tcp:close(Socket),
             ok
     end.
-
-start(test) ->
-    start(8888);
-start(Socket) ->
-    spawn(?MODULE, listen, [Socket]).
