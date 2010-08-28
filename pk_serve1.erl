@@ -67,14 +67,6 @@ parse(Str) ->
     {ok, T} = erl_parse:parse_term(Tks),
     io:format("~p~n", [T]),
     T. 
-
-cmd(Input) ->
-    case string:sub_word(Input, 1) of
-	"set" ->
-	    {set, Input -- "set "};
-	"get"  ->
-	    {get, Input -- "get "}
-    end.
             
 loop(Socket, Pid) ->
     inet:setopts(Socket, [{active, once}]),
