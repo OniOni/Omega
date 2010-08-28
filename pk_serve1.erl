@@ -10,17 +10,27 @@ start(test) ->
 start(Socket) ->
     spawn(?MODULE, listen, [Socket]).
 
+pk_init() ->
+    D = dict:new(),
+    Map1 = spawn(?MODULE, spine, [start]),
+    Map2 = spawn(?MODULE, spine, [start]),
+    D1 = dict:store("1", Map1, D),
+    D2 = dict:store("2", Map2, D1),
+    Maps = spawn(fun() -> get_map_list(D2) end),
+    %io:format("~p~n", [Maps]),
+    {Map1, Maps}.
+
 listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
-    Pid = spawn(?MODULE, spine, [start]),
-    accept(LSocket, Pid).
+    {Spine, Maps} = pk_init(),
+    accept(LSocket, Spine, Maps).
 
-accept(LSocket, Pid) ->
+accept(LSocket, Spine, Maps) ->
     case gen_tcp:accept(LSocket) of
 	{ok, Socket} ->
 	    inet:setopts(Socket, ?TCP_OPTIONS),
-	    spawn(fun() -> accept(LSocket, Pid) end),
-	    loop(Socket, Pid);
+	    spawn(fun() -> accept(LSocket, Spine, Maps) end),
+	    loop(Socket, Maps, Spine);
 	Other ->
 	    io:format("Got [~w]~n", [Other]),
 	    ok
@@ -49,6 +59,24 @@ pk_get(Spine) ->
 	    io:format("In pk_get~n D -> ~p~n", [dict:to_list(D)])
     end,
     dict:to_list(D).
+		  
+get_map_list(Maps) ->
+    receive
+	{Pid, Map} ->
+	    io:format("In get_map_list ~p|~p~n", [Map, dict:to_list(Maps)]),
+	    Pid ! {dict:fetch(Map, Maps)}
+    end,
+    io:format("Sent~n"),
+    get_map_list(Maps).
+
+ch_map(Map, Maps) ->
+    io:format("In ch_map~n"),
+    Maps ! {self(), Map},
+    receive
+	{New_map} ->
+	    io:format("Received ~p~n", [New_map])
+    end,
+    New_map.
 
 parse(Str) ->
     S = Str ++ ".",
@@ -56,21 +84,36 @@ parse(Str) ->
     {ok, T} = erl_parse:parse_term(Tks),
     io:format("~p~n", [T]),
     T.
+
+clean(Str) ->
+    (((Str -- " ") -- "\n") -- "\r").
             
-loop(Socket, Pid) ->
+loop(Socket, Maps, Spine) ->
     inet:setopts(Socket, [{active, once}]),
-    %case gen_tcp:recv(Socket, 0) of
     receive
         {tcp, Socket, Data} ->
 	    case bitstring_to_list(Data) of
 		[$s, $e, $t | Coord] ->
-		    KV = parse(Coord -- " "),
-		    pk_set(KV, Pid);
+		    Spine2 = Spine,
+		    KV = parse(clean(Coord)),
+		    pk_set(KV, Spine);
 		[$g, $e, $t | _] ->
-		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Pid)]))
+		    Spine2 = Spine,
+		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Spine)]));
+		[$m, $a, $p | Map] ->
+		    io:format("~p|~p~n", [Map, clean(Map)]),
+		    %gen_tcp:send(Socket, "ok\n"),
+		    Spine2 = ch_map(clean(Map), Maps),
+		    io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
+		Other ->
+		    Spine2 = Spine,
+		    gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other]))
 	    end,
-	    loop(Socket, Pid);
+	    loop(Socket, Maps, Spine2);
         {tcp_closed, Socket} ->
 	    gen_tcp:close(Socket),
-            ok
+            ok;
+	Other ->
+	    io:format("~p~n", [Other]),
+	    ok
     end.
