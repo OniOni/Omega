@@ -39,17 +39,6 @@ spine(D) ->
     end,
     spine(D1).
 
-to_from({Key, Value, Spine}, dict)->
-    Spine ! {self(), Key, Value},
-    receive
-	D ->
-	    io:format("In to_from~n D -> ~p~n", [dict:to_list(D)])
-    end,
-    D;
-
-to_from({Key, Value, Spine}, list) ->
-    dict:to_list(to_from({Key, Value, Spine}, dict)).
-
 pk_set({Key, Value}, Spine) ->
     Spine ! {Key, Value}.
 
@@ -66,7 +55,7 @@ parse(Str) ->
     {ok, Tks,_} = erl_scan:string(S),
     {ok, T} = erl_parse:parse_term(Tks),
     io:format("~p~n", [T]),
-    T. 
+    T.
             
 loop(Socket, Pid) ->
     inet:setopts(Socket, [{active, once}]),
