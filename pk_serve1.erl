@@ -10,19 +10,24 @@ start(test) ->
 start(Socket) ->
     spawn(?MODULE, listen, [Socket]).
 
-pk_init() ->
+pk_init({N}) ->
+    io:format("In pk_init/1~n"),
     D = dict:new(),
-    Map1 = spawn(?MODULE, spine, [start]),
-    Map2 = spawn(?MODULE, spine, [start]),
-    D1 = dict:store("1", Map1, D),
-    D2 = dict:store("2", Map2, D1),
-    Maps = spawn(fun() -> get_map_list(D2) end),
+    pk_init({D, N, tmp});
+pk_init({D, 0, Map}) ->
+    io:format("In pk_init/3 with 0~n"),
+    Maps = spawn(fun() -> get_map_list(D) end),
     %io:format("~p~n", [Maps]),
-    {Map1, Maps}.
+    {Map, Maps};
+pk_init({D, N, Map}) ->
+    io:format("In pk_init/3 ~p~n", [N]),
+    Map2 = spawn(?MODULE, spine, [start]),
+    D1 = dict:store(N, Map2, D),
+    pk_init({D1, N-1, Map2}).
 
 listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
-    {Spine, Maps} = pk_init(),
+    {Spine, Maps} = pk_init({3}),
     accept(LSocket, Spine, Maps).
 
 accept(LSocket, Spine, Maps) ->
@@ -70,8 +75,9 @@ get_map_list(Maps) ->
     get_map_list(Maps).
 
 ch_map(Map, Maps) ->
+    {M_int, _} = string:to_integer(Map),
     io:format("In ch_map~n"),
-    Maps ! {self(), Map},
+    Maps ! {self(), M_int},
     receive
 	{New_map} ->
 	    io:format("Received ~p~n", [New_map])
