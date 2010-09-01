@@ -57,6 +57,8 @@ spine(D) ->
 	{get, Pid} ->
 	    Pid ! D,
 	    D1 = D;
+	{del, Id} ->
+	    D1 = dict:erase(Id, D);
 	{Key, Value} ->
 	    D1 = dict:store(Key, Value, D)
     end,
@@ -66,6 +68,8 @@ spine(D) ->
 pk_set({Key, Value}, Spine) ->
     Spine ! {Key, Value}.
 
+pk_del(Id, Spine) ->
+    Spine ! {del, Id}.
 
 pk_get(Spine) ->
     Spine ! {get, self()},
@@ -121,6 +125,9 @@ loop(Socket, Maps, Spine) ->
 		[$g, $e, $t | _] ->
 		    Spine2 = Spine,
 		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Spine)]));
+		[$d, $e, $l | Id] ->
+		    Spine2 = Spine,
+		    pk_del(clean(Id), Spine);
 		[$m, $a, $p | Map] ->
 		    io:format("~p|~p~n", [Map, clean(Map)]),
 		    %gen_tcp:send(Socket, "ok\n"),
@@ -132,7 +139,7 @@ loop(Socket, Maps, Spine) ->
 	    end,
 	    loop(Socket, Maps, Spine2);
         {tcp_closed, Socket} ->
-	    gen_tcp:close(Socket),
+	    %gen_tcp:close(Socket),
             ok;
 	Other ->
 	    io:format("~p~n", [Other]),
