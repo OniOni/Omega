@@ -19,9 +19,9 @@ pk_init({N}) ->
 
 pk_init({D, 0, Map}) ->
     io:format("In pk_init/3 with 0~n"),
-    Maps = spawn(fun() -> get_map_list(D) end),
+    register(maps, spawn(fun() -> get_map_list(D) end)),
     %io:format("~p~n", [Maps]),
-    {Map, Maps};
+    Map;
 
 pk_init({D, N, Map}) ->
     io:format("In pk_init/3 ~p~n", [N]),
@@ -32,16 +32,16 @@ pk_init({D, N, Map}) ->
 
 listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
-    {Spine, Maps} = pk_init({3}),
-    accept(LSocket, Spine, Maps).
+    Spine = pk_init({3}),
+    accept(LSocket, Spine).
 
 
-accept(LSocket, Spine, Maps) ->
+accept(LSocket, Spine) ->
     case gen_tcp:accept(LSocket) of
 	{ok, Socket} ->
 	    inet:setopts(Socket, ?TCP_OPTIONS),
-	    spawn(fun() -> accept(LSocket, Spine, Maps) end),
-	    loop(Socket, Maps, Spine);
+	    spawn(fun() -> accept(LSocket, Spine) end),
+	    loop(Socket, Spine);
 	Other ->
 	    io:format("Got [~w]~n", [Other]),
 	    ok
@@ -90,10 +90,10 @@ get_map_list(Maps) ->
     get_map_list(Maps).
 
 
-ch_map(Map, Maps) ->
+ch_map(Map) ->
     {M_int, _} = string:to_integer(Map),
     io:format("In ch_map~n"),
-    Maps ! {self(), M_int},
+    maps ! {self(), M_int},
     receive
 	{New_map} ->
 	    io:format("Received ~p~n", [New_map])
@@ -113,7 +113,7 @@ clean(Str) ->
     (((Str -- " ") -- "\n") -- "\r").
 
             
-loop(Socket, Maps, Spine) ->
+loop(Socket, Spine) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
@@ -131,13 +131,13 @@ loop(Socket, Maps, Spine) ->
 		[$m, $a, $p | Map] ->
 		    io:format("~p|~p~n", [Map, clean(Map)]),
 		    %gen_tcp:send(Socket, "ok\n"),
-		    Spine2 = ch_map(clean(Map), Maps),
+		    Spine2 = ch_map(clean(Map)),
 		    io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
 		Other ->
 		    Spine2 = Spine,
 		    gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other]))
 	    end,
-	    loop(Socket, Maps, Spine2);
+	    loop(Socket, Spine2);
         {tcp_closed, Socket} ->
 	    %gen_tcp:close(Socket),
             ok;
