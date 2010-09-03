@@ -9,6 +9,7 @@ start(test) ->
     start(8888);
 
 start(Socket) ->
+    register(mess_serv, spawn(fun() -> mess_serv() end)),
     spawn(?MODULE, listen, [Socket]).
 
 
@@ -28,6 +29,27 @@ pk_init({D, N, Map}) ->
     Map2 = spawn(?MODULE, spine, [start]),
     D1 = dict:store(N, Map2, D),
     pk_init({D1, N-1, Map2}).
+
+mess_serv() ->
+    mess_serv(dict:new()).
+
+mess_serv(D) ->
+    receive 
+	{add, Name, Pid} ->
+	    D1 = dict:store(Name, Pid, D);
+	{mess, Name, Mess} ->
+	    D1 = D,
+	    dict:fetch(Name, D) ! Mess
+    end,
+    mess_serv(D1).
+
+
+mess_cl(Socket) ->
+    receive
+	Mess ->
+	    gen_tcp:send(Socket, io_lib:format("Mess: ~p~n", [Mess]))
+    end,
+    mess_cl(Socket).
 
 
 listen(Port) ->
@@ -118,6 +140,10 @@ loop(Socket, Spine) ->
     receive
         {tcp, Socket, Data} ->
 	    case bitstring_to_list(Data) of
+		[$i, $n, $i, $t | Name] ->
+		    Spine2 = Spine,
+		    mess_serv ! {add, clean(Name),
+				spawn(fun()-> mess_cl(Socket) end)};
 		[$s, $e, $t | Coord] ->
 		    Spine2 = Spine,
 		    KV = parse(clean(Coord)),
@@ -131,8 +157,13 @@ loop(Socket, Spine) ->
 		[$m, $a, $p | Map] ->
 		    %io:format("~p|~p~n", [Map, clean(Map)]),
 		    %gen_tcp:send(Socket, "ok\n"),
-		    Spine2 = ch_map(clean(Map)),
+		    Spine2 = ch_map(clean(Map));
 		    %io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
+		[$m, $e, $s, $s | Mess] ->
+		    Spine2 = Spine,
+		    mess_serv ! {mess, 
+				clean(string:sub_word(Mess, 1)),
+				clean(string:sub_word(Mess, 2))};
 		Other ->
 		    Spine2 = Spine,
 		    gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other]))
