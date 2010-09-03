@@ -13,18 +13,18 @@ start(Socket) ->
 
 
 pk_init({N}) ->
-    io:format("In pk_init/1~n"),
+    %io:format("In pk_init/1~n"),
     D = dict:new(),
     pk_init({D, N, tmp});
 
 pk_init({D, 0, Map}) ->
-    io:format("In pk_init/3 with 0~n"),
+    %io:format("In pk_init/3 with 0~n"),
     register(maps, spawn(fun() -> get_map_list(D) end)),
     %io:format("~p~n", [Maps]),
     Map;
 
 pk_init({D, N, Map}) ->
-    io:format("In pk_init/3 ~p~n", [N]),
+    %io:format("In pk_init/3 ~p~n", [N]),
     Map2 = spawn(?MODULE, spine, [start]),
     D1 = dict:store(N, Map2, D),
     pk_init({D1, N-1, Map2}).
@@ -83,16 +83,16 @@ pk_get(Spine) ->
 get_map_list(Maps) ->
     receive
 	{Pid, Map} ->
-	    io:format("In get_map_list ~p|~p~n", [Map, dict:to_list(Maps)]),
+	    %io:format("In get_map_list ~p|~p~n", [Map, dict:to_list(Maps)]),
 	    Pid ! {dict:fetch(Map, Maps)}
     end,
-    io:format("Sent~n"),
+    %io:format("Sent~n"),
     get_map_list(Maps).
 
 
 ch_map(Map) ->
     {M_int, _} = string:to_integer(Map),
-    io:format("In ch_map~n"),
+    %io:format("In ch_map~n"),
     maps ! {self(), M_int},
     receive
 	{New_map} ->
@@ -105,7 +105,7 @@ parse(Str) ->
     S = Str ++ ".",
     {ok, Tks,_} = erl_scan:string(S),
     {ok, T} = erl_parse:parse_term(Tks),
-    io:format("~p~n", [T]),
+    %io:format("~p~n", [T]),
     T.
 
 
@@ -129,10 +129,10 @@ loop(Socket, Spine) ->
 		    Spine2 = Spine,
 		    pk_del(clean(Id), Spine);
 		[$m, $a, $p | Map] ->
-		    io:format("~p|~p~n", [Map, clean(Map)]),
+		    %io:format("~p|~p~n", [Map, clean(Map)]),
 		    %gen_tcp:send(Socket, "ok\n"),
 		    Spine2 = ch_map(clean(Map)),
-		    io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
+		    %io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
 		Other ->
 		    Spine2 = Spine,
 		    gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other]))
