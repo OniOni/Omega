@@ -139,36 +139,44 @@ loop(Socket, Spine) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
-	    case bitstring_to_list(Data) of
-		[$i, $n, $i, $t | Name] ->
-		    Spine2 = Spine,
-		    mess_serv ! {add, clean(Name),
-				spawn(fun()-> mess_cl(Socket) end)};
-		[$s, $e, $t | Coord] ->
-		    Spine2 = Spine,
-		    KV = parse(clean(Coord)),
-		    pk_set(KV, Spine);
-		[$g, $e, $t | _] ->
-		    Spine2 = Spine,
-		    gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Spine)]));
-		[$d, $e, $l | Id] ->
-		    Spine2 = Spine,
-		    pk_del(clean(Id), Spine);
-		[$m, $a, $p | Map] ->
-		    %io:format("~p|~p~n", [Map, clean(Map)]),
-		    %gen_tcp:send(Socket, "ok\n"),
-		    Spine2 = ch_map(clean(Map));
-		    %io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
-		[$m, $e, $s, $s | Mess] ->
-		    Spine2 = Spine,
-		    mess_serv ! {mess, 
-				clean(string:sub_word(Mess, 1)),
-				clean(string:sub_word(Mess, 2))};
-		Other ->
-		    Spine2 = Spine,
-		    gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other]))
-	    end,
-	    loop(Socket, Spine2);
+	   case 
+	       case bitstring_to_list(Data) of
+		   [$i, $n, $i, $t | Name] ->
+		       mess_serv ! {add, clean(Name),
+				    spawn(fun()-> mess_cl(Socket) end)},
+		       ok;
+		   [$s, $e, $t | Coord] ->
+		       KV = parse(clean(Coord)),
+		       pk_set(KV, Spine),
+		       ok;
+		   [$g, $e, $t | _] ->
+		       gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Spine)])),
+		       ok;
+		   [$d, $e, $l | Id] ->
+		       pk_del(clean(Id), Spine),
+		       ok;
+		   [$m, $a, $p | Map] ->
+						%io:format("~p|~p~n", [Map, clean(Map)]),
+						%gen_tcp:send(Socket, "ok\n"),
+		       {ok, ch_map(clean(Map))};
+						%io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
+		   [$m, $e, $s, $s | Mess] ->
+		       mess_serv ! {mess, 
+				    clean(string:sub_word(Mess, 1)),
+				    clean(string:sub_word(Mess, 2))},
+		       ok;
+		   Other ->
+		       gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other])),
+		       ok		   
+	       end
+	   of 
+	       ok ->
+		   loop(Socket, Spine);
+	       {ok, Spine2} ->
+		   loop(Socket, Spine2);
+	       {error, Message} ->
+		   Message
+	   end;
         {tcp_closed, Socket} ->
 	    %gen_tcp:close(Socket),
             ok;
