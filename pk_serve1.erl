@@ -174,9 +174,10 @@ loop(Socket, Spine, DB) ->
 		       {ok, ch_map(clean(Map))};
 						%io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
 		   [$m, $e, $s, $s | Mess] ->
+		       First = clean(string:sub_word(Mess, 1)),
 		       mess_serv ! {mess,
-				    clean(string:sub_word(Mess, 1)),
-				    clean(string:sub_word(Mess, 2))},
+				    First,
+				    clean(Mess -- First)},
 		       ok;
 		   [$p, $u, $s, $h | Info] ->
 		       First = clean(string:sub_word(Info, 1)),
