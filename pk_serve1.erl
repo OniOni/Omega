@@ -63,7 +63,8 @@ accept(LSocket, Spine) ->
 	{ok, Socket} ->
 	    inet:setopts(Socket, ?TCP_OPTIONS),
 	    spawn(fun() -> accept(LSocket, Spine) end),
-	    loop(Socket, Spine);
+	    DB = spawn(fun() -> spine(start) end),
+	    loop(Socket, Spine, DB);
 	Other ->
 	    io:format("Got [~w]~n", [Other]),
 	    ok
@@ -76,6 +77,9 @@ spine(start) ->
 
 spine(D) ->
     receive
+	{get, Key, Pid} ->
+	    Pid ! dict:fetch(Key, D),
+	    D1 = D;
 	{get, Pid} ->
 	    Pid ! D,
 	    D1 = D;
@@ -100,6 +104,15 @@ pk_get(Spine) ->
 	    io:format("In pk_get~n D -> ~p~n", [dict:to_list(D)])
     end,
     dict:to_list(D).
+
+
+db_peek(Key, DB) ->
+    DB ! {get, Key, self()},
+    receive
+	Value ->
+	    Value
+    end.
+	    
 
 		  
 get_map_list(Maps) ->
@@ -135,7 +148,7 @@ clean(Str) ->
     (((Str -- " ") -- "\n") -- "\r").
 
             
-loop(Socket, Spine) ->
+loop(Socket, Spine, DB) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
@@ -161,9 +174,18 @@ loop(Socket, Spine) ->
 		       {ok, ch_map(clean(Map))};
 						%io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
 		   [$m, $e, $s, $s | Mess] ->
-		       mess_serv ! {mess, 
+		       mess_serv ! {mess,
 				    clean(string:sub_word(Mess, 1)),
 				    clean(string:sub_word(Mess, 2))},
+		       ok;
+		   [$p, $u, $s, $h | Info] ->
+		       First = clean(string:sub_word(Info, 1)),
+		       DB ! {First,
+			     clean(Info -- First)},
+		       ok;
+		   [$p, $e, $e, $k | Key] ->
+		       gen_tcp:send(Socket,
+				    io_lib:format("~p~n", [db_peek(clean(Key), DB)])),
 		       ok;
 		   Other ->
 		       gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other])),
@@ -171,9 +193,9 @@ loop(Socket, Spine) ->
 	       end
 	   of 
 	       ok ->
-		   loop(Socket, Spine);
+		   loop(Socket, Spine, DB);
 	       {ok, Spine2} ->
-		   loop(Socket, Spine2);
+		   loop(Socket, Spine2, DB);
 	       {error, Message} ->
 		   Message
 	   end;
