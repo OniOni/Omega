@@ -37,17 +37,17 @@ mess_serv(D) ->
     receive 
 	{add, Name, Pid} ->
 	    D1 = dict:store(Name, Pid, D);
-	{mess, Name, Mess} ->
+	{mess, Name, From, Mess} ->
 	    D1 = D,
-	    dict:fetch(Name, D) ! Mess
+	    dict:fetch(Name, D) ! {From, Mess}
     end,
     mess_serv(D1).
 
 
 mess_cl(Socket) ->
     receive
-	Mess ->
-	    gen_tcp:send(Socket, io_lib:format("Mess: ~p~n", [Mess]))
+	{From, Mess} ->
+	    gen_tcp:send(Socket, io_lib:format("~p:~p~n", [From, Mess]))
     end,
     mess_cl(Socket).
 
@@ -157,6 +157,8 @@ loop(Socket, Spine, DB) ->
 		   [$i, $n, $i, $t | Name] ->
 		       mess_serv ! {add, clean(Name),
 				    spawn(fun()-> mess_cl(Socket) end)},
+		       DB ! {id,
+			     clean(Name)},
 		       ok;
 		   [$s, $e, $t | Coord] ->
 		       KV = parse(clean(Coord)),
@@ -177,6 +179,7 @@ loop(Socket, Spine, DB) ->
 		       First = clean(string:sub_word(Mess, 1)),
 		       mess_serv ! {mess,
 				    First,
+				    db_peek(id, DB),
 				    clean(Mess -- First)},
 		       ok;
 		   [$p, $u, $s, $h | Info] ->
