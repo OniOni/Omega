@@ -1,17 +1,19 @@
 -module(pk_serve1).
 -author("Mathieu Sabourin").
 
--export([listen/1, start/1, spine/1]).
+-export([listen/1, start/1, spine/1, restart/1]).
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, once}, {reuseaddr, true}]).
+
+restart(Socket)->
+    spawn(?MODULE, listen, [Socket]).
 
 start(test) ->
     start(8888);
 
 start(Socket) ->
     register(mess_serv, spawn(fun() -> mess_serv() end)),
-    spawn(?MODULE, listen, [Socket]).
-
+    restart(Socket).
 
 pk_init({N}) ->
     %io:format("In pk_init/1~n"),
