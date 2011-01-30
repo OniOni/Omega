@@ -167,7 +167,7 @@ loop(Socket, Spine, DB) ->
 		       pk_set(KV, Spine),
 		       ok;
 		   [$g, $e, $t | _] ->
-		       gen_tcp:send(Socket, io_lib:format("~p~n", [pk_get(Spine)])),
+		       gen_tcp:send(Socket, io_lib:format("~p", [pk_get(Spine)])),
 		       ok;
 		   [$d, $e, $l | Id] ->
 		       pk_del(clean(Id), Spine),
