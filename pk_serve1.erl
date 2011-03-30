@@ -63,10 +63,11 @@ listen(Port) ->
 accept(LSocket, Spine) ->
     case gen_tcp:accept(LSocket) of
 	{ok, Socket} ->
-	    inet:setopts(Socket, ?TCP_OPTIONS),
-	    spawn(fun() -> accept(LSocket, Spine) end),
+						%inet:setopts(Socket, ?TCP_OPTIONS),
+	    io:format("Accept~n"),
 	    DB = spawn(fun() -> spine(start) end),
-	    loop(Socket, Spine, DB);
+	    spawn(fun() ->  loop(Socket, Spine, DB) end),
+	    accept(LSocket, Spine);
 	Other ->
 	    io:format("Got [~w]~n", [Other]),
 	    ok
@@ -151,22 +152,26 @@ clean(Str) ->
 
             
 loop(Socket, Spine, DB) ->
-    inet:setopts(Socket, [{active, once}]),
+						%inet:setopts(Socket, [{active, once}]),
+    io:format("In loop~n"),
     receive
         {tcp, Socket, Data} ->
 	   case 
 	       case bitstring_to_list(Data) of
 		   [$i, $n, $i, $t | Name] ->
+		       io:format("Init : ~p", [clean(Name)]),
 		       mess_serv ! {add, clean(Name),
 				    spawn(fun()-> mess_cl(Socket) end)},
 		       DB ! {id,
 			     clean(Name)},
 		       ok;
 		   [$s, $e, $t | Coord] ->
+		       io:format("Set : ~p", [clean(Coord)]),
 		       KV = parse(clean(Coord)),
 		       pk_set(KV, Spine),
 		       ok;
 		   [$g, $e, $t | _] ->
+		       io:format("Get"),
 		       gen_tcp:send(Socket, io_lib:format("~p", [pk_get(Spine)])),
 		       ok;
 		   [$d, $e, $l | Id] ->
