@@ -63,10 +63,13 @@ listen(Port) ->
 accept(LSocket, Spine) ->
     case gen_tcp:accept(LSocket) of
 	{ok, Socket} ->
-						%inet:setopts(Socket, ?TCP_OPTIONS),
+	    inet:setopts(Socket, ?TCP_OPTIONS),
 	    io:format("Accept~n"),
 	    DB = spawn(fun() -> spine(start) end),
-	    spawn(fun() ->  loop(Socket, Spine, DB) end),
+	    gen_tcp:controlling_process(Socket, spawn(fun() ->  loop(Socket, Spine, DB) end)),
+						%{error, Reason} ->
+						%io:format("Error : ~p~n", [Reason])
+						%end,
 	    accept(LSocket, Spine);
 	Other ->
 	    io:format("Got [~w]~n", [Other]),
@@ -152,66 +155,66 @@ clean(Str) ->
 
             
 loop(Socket, Spine, DB) ->
-						%inet:setopts(Socket, [{active, once}]),
-    io:format("In loop~n"),
+    inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
-	   case 
-	       case bitstring_to_list(Data) of
-		   [$i, $n, $i, $t | Name] ->
-		       io:format("Init : ~p", [clean(Name)]),
-		       mess_serv ! {add, clean(Name),
-				    spawn(fun()-> mess_cl(Socket) end)},
-		       DB ! {id,
-			     clean(Name)},
-		       ok;
-		   [$s, $e, $t | Coord] ->
-		       io:format("Set : ~p", [clean(Coord)]),
-		       KV = parse(clean(Coord)),
-		       pk_set(KV, Spine),
-		       ok;
-		   [$g, $e, $t | _] ->
-		       io:format("Get"),
-		       gen_tcp:send(Socket, io_lib:format("~p", [pk_get(Spine)])),
-		       ok;
-		   [$d, $e, $l | Id] ->
-		       pk_del(clean(Id), Spine),
-		       ok;
-		   [$m, $a, $p | Map] ->
+	    case 
+		case bitstring_to_list(Data) of
+		    [$i, $n, $i, $t | Name] ->
+			io:format("Init : ~p", [clean(Name)]),
+			mess_serv ! {add, clean(Name),
+				     spawn(fun()-> mess_cl(Socket) end)},
+			DB ! {id,
+			      clean(Name)},
+			ok;
+		    [$s, $e, $t | Coord] ->
+			io:format("Set : ~p", [clean(Coord)]),
+			KV = parse(clean(Coord)),
+			pk_set(KV, Spine),
+			ok;
+		    [$g, $e, $t | _] ->
+			io:format("Get"),
+			gen_tcp:send(Socket, io_lib:format("~p", [pk_get(Spine)])),
+			ok;
+		    [$d, $e, $l | Id] ->
+			pk_del(clean(Id), Spine),
+			ok;
+		    [$m, $a, $p | Map] ->
 						%io:format("~p|~p~n", [Map, clean(Map)]),
 						%gen_tcp:send(Socket, "ok\n"),
-		       {ok, ch_map(clean(Map))};
+			{ok, ch_map(clean(Map))};
 						%io:format("In ~p New map pid is ~p~n", [self(), Spine2]);
-		   [$m, $e, $s, $s | Mess] ->
-		       First = clean(string:sub_word(Mess, 1)),
-		       mess_serv ! {mess,
-				    First,
-				    db_peek(id, DB),
-				    clean(Mess -- First)},
-		       ok;
-		   [$p, $u, $s, $h | Info] ->
-		       First = clean(string:sub_word(Info, 1)),
-		       DB ! {First,
-			     clean(Info -- First)},
-		       ok;
-		   [$p, $e, $e, $k | Key] ->
-		       gen_tcp:send(Socket,
-				    io_lib:format("~p~n", [db_peek(clean(Key), DB)])),
-		       ok;
-		   Other ->
-		       gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other])),
-		       ok		   
-	       end
-	   of 
-	       ok ->
-		   loop(Socket, Spine, DB);
-	       {ok, Spine2} ->
-		   loop(Socket, Spine2, DB);
-	       {error, Message} ->
-		   Message
-	   end;
+		    [$m, $e, $s, $s | Mess] ->
+			First = clean(string:sub_word(Mess, 1)),
+			mess_serv ! {mess,
+				     First,
+				     db_peek(id, DB),
+				     clean(Mess -- First)},
+			ok;
+		    [$p, $u, $s, $h | Info] ->
+			First = clean(string:sub_word(Info, 1)),
+			DB ! {First,
+			      clean(Info -- First)},
+			ok;
+		    [$p, $e, $e, $k | Key] ->
+			gen_tcp:send(Socket,
+				     io_lib:format("~p~n", [db_peek(clean(Key), DB)])),
+			ok;
+		    Other ->
+			gen_tcp:send(Socket, io_lib:format("~p not recognized~n", [Other])),
+			ok		   
+		end
+	    of 
+		ok ->
+		    loop(Socket, Spine, DB);
+		{ok, Spine2} ->
+		    loop(Socket, Spine2, DB);
+		{error, Message} ->
+		    Message
+	    end;
         {tcp_closed, Socket} ->
-	    %gen_tcp:close(Socket),
+	    gen_tcp:close(Socket),
+	    io:format("Closed Socket~n"),
             ok;
 	Other ->
 	    io:format("~p~n", [Other]),
