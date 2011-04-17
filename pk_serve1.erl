@@ -8,9 +8,11 @@
 restart(Socket)->
     spawn(?MODULE, listen, [Socket]).
 
+%Start server, listen on port 8888
 start(test) ->
     start(8888);
 
+%Start server, listen on port Socket
 start(Socket) ->
     register(mess_serv, spawn(fun() -> mess_serv() end)),
     restart(Socket).
@@ -41,7 +43,12 @@ mess_serv(D) ->
 	    D1 = dict:store(Name, Pid, D);
 	{mess, Name, From, Mess} ->
 	    D1 = D,
-	    dict:fetch(Name, D) ! {From, Mess}
+	    case dict:find(Name, D) of
+		{ok, Dest} ->
+		    Dest ! {From, Mess};
+		error ->
+		    io:format("Client not found")
+	    end
     end,
     mess_serv(D1).
 
